@@ -1,0 +1,17 @@
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+
+# Python
+app/.venv/
+app/build/
+app/dist/
+app/*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OpenSCAD
+*.stl

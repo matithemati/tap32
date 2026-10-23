@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tap32"
+version = "1.0.0"
+description = "Tap32 – aplikacja konfiguracyjna macropada 3×3 z pokrętłem i ekranem OLED"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "PySide6>=6.7",
+    "pyserial>=3.5",
+    "pynput>=1.7.7",
+    "psutil>=5.9",
+    "pydantic>=2.6",
+    "pywin32>=306; sys_platform == 'win32'",
+    "pycaw>=20240210; sys_platform == 'win32'",
+    "comtypes>=1.4; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-qt>=4.4",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pyinstaller>=6.6",
+]
+
+[project.scripts]
+tap32 = "tap32.main:main"
+
+[project.gui-scripts]
+tap32w = "tap32.main:main"
+
+[tool.setuptools.packages.find]
+include = ["tap32*"]
+
+[tool.setuptools.package-data]
+tap32 = ["assets/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003", "SIM105"]  # SIM105: try/except/pass jest czytelne; polskie znaki w napisach i komentarzach są zamierzone
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "RUF059"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_ignores = false
+exclude = ["build/", "dist/"]

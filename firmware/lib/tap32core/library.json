@@ -1,0 +1,10 @@
+{
+  "name": "tap32core",
+  "version": "1.0.0",
+  "description": "Tap32: logika niezależna od sprzętu (dekoder enkodera, debounce, protokół, kody HID, konfiguracja)",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": {
+    "bblanchon/ArduinoJson": "^7.4.3"
+  }
+}
