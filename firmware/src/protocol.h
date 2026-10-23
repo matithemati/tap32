@@ -25,6 +25,7 @@ class Link {
   void sendTest(bool active);
 
   bool debug = false;
+  const I2cDiag* diag = nullptr;  // dołączane do hello
 
  private:
   void sendRaw(size_t len);

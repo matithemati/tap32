@@ -221,7 +221,7 @@ w ramkę prowadzącą od spodu, enkoder przykręca nakrętką M7, płytka wsuwa 
 | XIAO nie pojawia się jako klawiatura / brak portu | Firmware musi być zbudowany z `ARDUINO_USB_MODE=0` (środowisko `xiao_esp32s3`). Po wgraniu naciśnij RESET. |
 | Nie da się wgrać na XIAO | Wejdź w tryb pobierania: BOOT + podłączenie kabla. |
 | KB2040 nie widać jako dysku | BOOT trzymany podczas RESET; inny kabel/port. |
-| Pusty ekran | Zasilanie 3,3 V, zamienione SDA/SCL, adres 0x3D zamiast 0x3C (ustaw `oled_addr` albo `TAP32_OLED_ADDR`). |
+| Pusty ekran | Spójrz na pasek stanu aplikacji: **OLED: 0x3C/0x3D** = ekran odpowiada (adres wybierany automatycznie), **OLED: brak** = nic nie odpowiada na I²C – sprawdź zasilanie 3,3 V, GND, zamienione SDA/SCL i lutowanie. Lista znalezionych urządzeń jest w zakładce Dziennik. |
 | Pokrętło liczy podwójnie / co drugi ząbek | Ustawienia → Pokrętło → **Impulsy na ząbek** (EC11 zwykle 4, niektóre 2). |
 | Pokrętło kręci odwrotnie | Ustawienia → Pokrętło → **Odwróć kierunek**. |
 | Kilka klawiszy reaguje naraz | Odwrócona dioda albo brak diody; sprawdź w trybie testu sprzętu. |

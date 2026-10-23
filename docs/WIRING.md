@@ -74,15 +74,19 @@ Moduły OLED mają zwykle własne rezystory podciągające 4,7–10 kΩ.
 | Enkoder A | 19 (MOSI) | D0 / 1 |
 | Enkoder B | 20 (MISO) | D1 / 2 |
 | Enkoder SW | 18 (SCK) | D3 / 4 |
-| OLED SDA | 0 (D0, I²C0) | D4 / 5 |
-| OLED SCL | 1 (D1, I²C0) | D5 / 6 |
+| OLED SDA | 3 (D3, programowe I²C) | D4 / 5 |
+| OLED SCL | 2 (D2, programowe I²C) | D5 / 6 |
 | Dioda statusu | NeoPixel GPIO17 (wbudowany) | LED użytkownika GPIO21 (wbudowana, aktywna stanem niskim) |
 
 Plik źródłowy prawdy: `firmware/src/boards/board_kb2040.h` i `board_xiao_esp32s3.h`.
 
 ### Uwagi – KB2040
 
-- I²C0 na GPIO0/1 (`Wire.setSDA(0); Wire.setSCL(1);`). UART0 na tych pinach **nie jest** inicjalizowany.
+- OLED: SDA = GPIO3, SCL = GPIO2 – tak poprowadzono ścieżki na PCB. Sprzętowe I2C1 RP2040 ma te piny
+  odwrotnie (GPIO2 = SDA, GPIO3 = SCL), więc firmware obsługuje ekran **programowym I²C** (U8g2 SW_I2C,
+  `kOledSoftI2c` w `board_kb2040.h`). Przy nowej płytce z SDA na GPIO2 i SCL na GPIO3 można wrócić do
+  sprzętowego I²C (`kOledSoftI2c = false`).
+- GPIO0/1 (D0/D1, UART0) są wolne.
 - NeoPixel na GPIO17 jest wbudowany na płytce. Jasność ograniczona programowo.
 - Złącze STEMMA QT (GPIO12/13) nie jest używane.
 

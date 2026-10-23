@@ -122,3 +122,33 @@ def test_parse_device_messages() -> None:
 def test_parse_device_message_invalid(msg: dict) -> None:
     with pytest.raises(ProtocolError):
         protocol.parse_device_message(msg)
+
+
+def test_hello_display_diagnostics() -> None:
+    base = {"type": "hello", "device": "tap32", "fw": "1.0.1", "board": "kb2040"}
+    old = protocol.parse_device_message(base)
+    assert isinstance(old, DeviceInfo) and not old.has_diag and old.oled_status == "?"
+    found = protocol.parse_device_message({**base, "oled": 0x3D, "i2c": [0x3D, 0x50]})
+    assert isinstance(found, DeviceInfo)
+    assert found.oled_addr == 0x3D and found.i2c_devices == (0x3D, 0x50)
+    assert found.oled_status == "0x3D"
+    missing = protocol.parse_device_message({**base, "oled": None, "i2c": []})
+    assert isinstance(missing, DeviceInfo)
+    assert missing.has_diag and missing.oled_addr is None and missing.oled_status == "brak"
+
+
+def test_hello_line_levels_and_swap() -> None:
+    info = protocol.parse_device_message(
+        {
+            "type": "hello",
+            "device": "tap32",
+            "fw": "1.0.3",
+            "board": "kb2040",
+            "oled": None,
+            "i2c": [],
+            "lines": {"sda": 0, "scl": 1},
+            "swapped": True,
+        }
+    )
+    assert isinstance(info, DeviceInfo)
+    assert info.sda_level == 0 and info.scl_level == 1 and info.swapped

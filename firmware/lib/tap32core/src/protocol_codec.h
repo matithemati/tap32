@@ -93,7 +93,20 @@ struct ParseResult {
 ParseResult parseCommand(const char* line, size_t len, Command& out);
 
 // Budowanie wiadomości wychodzących. Zwracają długość (bez \0, bez \n) lub 0 przy braku miejsca.
-size_t buildHello(char* buf, size_t cap, const char* board, const char* fw, bool online);
+// Wynik skanowania magistrali I²C przy starcie (diagnostyka ekranu).
+struct I2cDiag {
+  uint8_t oledAddr = 0;  // adres, pod którym odpowiada OLED (0 = brak odpowiedzi)
+  uint8_t count = 0;
+  uint8_t devices[8] = {0};  // wszystkie znalezione adresy (maks. 8)
+  // Stan linii bez wewnętrznego podciągania (programowe I²C): 1 = wysoki, 0 = niski, −1 = nie mierzono.
+  int8_t sdaLevel = -1;
+  int8_t sclLevel = -1;
+  bool swapped = false;  // ekran znaleziony dopiero po zamianie SDA i SCL
+};
+
+// diag == nullptr → bez pól diagnostycznych.
+size_t buildHello(char* buf, size_t cap, const char* board, const char* fw, bool online,
+                  const I2cDiag* diag = nullptr);
 size_t buildKey(char* buf, size_t cap, uint8_t key, bool down, uint32_t t);
 size_t buildEnc(char* buf, size_t cap, int32_t steps, uint32_t t);
 size_t buildAck(char* buf, size_t cap, int32_t id);

@@ -195,6 +195,8 @@ class SimulatedDevice:
             "encoder": True,
             "hid": True,
             "online": self.online,
+            "oled": 0x3C,
+            "i2c": [0x3C],
         }
 
     def _dispatch(self, message: dict[str, Any]) -> bool:

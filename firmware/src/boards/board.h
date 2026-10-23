@@ -1,6 +1,7 @@
 // Wybór mapy pinów płytki na podstawie flagi budowania (platformio.ini).
 // Każdy plik board_*.h definiuje w przestrzeni nazw tap32::board te same stałe:
-//   kBoardId, kBoardName, kRowPins[3], kColPins[3], kEncA, kEncB, kEncSw, kSda, kScl
+//   kBoardId, kBoardName, kRowPins[3], kColPins[3], kEncA, kEncB, kEncSw, kSda, kScl,
+//   kOledSoftI2c (true = ekran przez programowe I²C na pinach kSda/kScl)
 // oraz makro TAP32_ISR_ATTR (atrybut funkcji obsługi przerwań).
 #pragma once
 

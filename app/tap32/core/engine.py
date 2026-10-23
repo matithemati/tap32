@@ -169,6 +169,8 @@ class Controller:
     ) -> None:
         if state == ConnectionState.CONNECTED:
             self.device_info = info
+            if info is not None:
+                _report_display(info)
             self.gestures.reset()
             self.push_device_state()
             self._notify(lambda li: li.connection_changed(True, info, port))
@@ -396,6 +398,39 @@ class Controller:
                 fn(listener)
             except Exception:
                 log.exception("Błąd słuchacza kontrolera")
+
+
+def _report_display(info: DeviceInfo) -> None:
+    """Wynik skanu I²C z urządzenia → wpis w dzienniku (diagnostyka czarnego ekranu)."""
+    if not info.has_diag:
+        return
+    found = ", ".join(f"0x{a:02X}" for a in info.i2c_devices) or "nic"
+    if info.oled_addr is None:
+        log.warning(
+            "Ekran OLED nie odpowiada na I²C (znalezione urządzenia: %s). Sprawdź zasilanie "
+            "3,3 V, GND oraz czy SDA i SCL nie są zamienione (KB2040: SDA=D3, SCL=D2; "
+            "XIAO: SDA=D4, SCL=D5).",
+            found,
+        )
+    else:
+        log.info("Ekran OLED pod adresem 0x%02X (urządzenia I²C: %s)", info.oled_addr, found)
+    if info.swapped:
+        log.warning(
+            "Ekran odpowiada dopiero po zamianie SDA i SCL – firmware używa zamienionych pinów "
+            "(na PCB lub module linie są odwrotnie niż w opisie)."
+        )
+    for name, level in (("SDA", info.sda_level), ("SCL", info.scl_level)):
+        if level == 0:
+            log.warning(
+                "Linia %s ma stan niski bez podciągania: moduł OLED nie jest zasilony, nie jest "
+                "podłączony do tego pinu, nie ma rezystorów pull-up albo linia jest zwarta do GND.",
+                name,
+            )
+    if info.oled_addr is None and info.sda_level == 1 and info.scl_level == 1:
+        log.warning(
+            "Obie linie mają stan wysoki (moduł zasilony, pull-upy są), ale nic nie odpowiada – "
+            "sprawdź, czy SDA/SCL modułu trafiają na właściwe piny i czy moduł jest sprawny."
+        )
 
 
 def _key_name(key: int | None) -> str:

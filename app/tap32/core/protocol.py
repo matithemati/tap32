@@ -226,10 +226,24 @@ class DeviceInfo:
     keys: int = KEY_COUNT
     encoder: bool = True
     hid: bool = True
+    # Diagnostyka I²C (firmware ≥ 1.0.1): has_diag=False – starszy firmware bez tych pól.
+    has_diag: bool = False
+    oled_addr: int | None = None  # None = ekran nie odpowiada
+    i2c_devices: tuple[int, ...] = ()
+    # Stan linii bez wewnętrznego pull-upu (1 = wysoki, 0 = niski, None = nie mierzono)
+    sda_level: int | None = None
+    scl_level: int | None = None
+    swapped: bool = False  # ekran znaleziony po zamianie SDA/SCL
 
     @property
     def board_name(self) -> str:
         return BOARD_NAMES.get(self.board, self.board)
+
+    @property
+    def oled_status(self) -> str:
+        if not self.has_diag:
+            return "?"
+        return f"0x{self.oled_addr:02X}" if self.oled_addr is not None else "brak"
 
 
 @dataclass(frozen=True)
@@ -279,6 +293,12 @@ def _int(data: dict[str, Any], key: str, default: int | None = None) -> int:
     return value
 
 
+def _level(data: dict[str, Any], line: str) -> int | None:
+    lines = data.get("lines")
+    value = lines.get(line) if isinstance(lines, dict) else None
+    return value if value in (0, 1) and not isinstance(value, bool) else None
+
+
 def parse_device_message(data: dict[str, Any]) -> DeviceMessage | None:
     """Zamienia słownik od urządzenia na obiekt. Nieznany typ → None (ignorujemy)."""
     kind = data.get("type")
@@ -293,6 +313,14 @@ def parse_device_message(data: dict[str, Any]) -> DeviceMessage | None:
             keys=_int(data, "keys", KEY_COUNT),
             encoder=bool(data.get("encoder", True)),
             hid=bool(data.get("hid", True)),
+            has_diag="oled" in data,
+            oled_addr=oled if isinstance(oled := data.get("oled"), int) else None,
+            i2c_devices=tuple(
+                a for a in data.get("i2c", []) or [] if isinstance(a, int) and 0 <= a < 128
+            ),
+            sda_level=_level(data, "sda"),
+            scl_level=_level(data, "scl"),
+            swapped=data.get("swapped") is True,
         )
     if kind == "key":
         key = _int(data, "key")

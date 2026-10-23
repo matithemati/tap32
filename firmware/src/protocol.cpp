@@ -45,7 +45,7 @@ void Link::sendRaw(size_t len) {
 }
 
 void Link::sendHello(bool online) {
-  sendRaw(buildHello(tx_, sizeof(tx_), board::kBoardId, TAP32_FW_VERSION, online));
+  sendRaw(buildHello(tx_, sizeof(tx_), board::kBoardId, TAP32_FW_VERSION, online, diag));
 }
 
 void Link::sendKey(uint8_t key, bool down, uint32_t t) {

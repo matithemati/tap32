@@ -26,6 +26,14 @@ Wspólne zasady:
 - `keys`: liczba klawiszy (9 w matrycy + przycisk enkodera = 10).
 - `hid`: urządzenie ma interfejs HID (tryb awaryjny).
 - `online` (informacyjnie): czy urządzenie uważa aplikację za połączoną.
+- `oled` (od fw 1.0.1): adres I²C, pod którym odpowiada ekran (np. `60` = 0x3C), albo `null`,
+  gdy ekran nie odpowiada. Firmware przy starcie sam wybiera 0x3C lub 0x3D, jeśli ustawiony adres
+  nie odpowiada.
+- `i2c` (od fw 1.0.1): lista adresów wszystkich urządzeń znalezionych na magistrali I²C (maks. 8).
+- `lines` (od fw 1.0.3, tylko programowe I²C): `{"sda":0|1,"scl":0|1}` – stan linii zmierzony bez
+  wewnętrznego podciągania (1 = moduł zasilony i ma pull-upy).
+- `swapped` (od fw 1.0.3): `true`, gdy ekran odpowiedział dopiero po zamianie SDA i SCL
+  (firmware używa wtedy zamienionych pinów).
 
 Wysyłane: po starcie, w odpowiedzi na `hello` od PC i na `get_info`.
 

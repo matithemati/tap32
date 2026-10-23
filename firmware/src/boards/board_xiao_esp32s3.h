@@ -22,6 +22,7 @@ constexpr uint8_t kEncSw = 4;  // D3
 
 constexpr uint8_t kSda = 5;  // D4
 constexpr uint8_t kScl = 6;  // D5
+constexpr bool kOledSoftI2c = false;  // ESP32 mapuje sprzętowe I²C na dowolne piny
 
 constexpr uint8_t kLedPin = 21;  // wbudowana dioda użytkownika
 constexpr bool kLedActiveLow = true;

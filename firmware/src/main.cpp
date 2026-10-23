@@ -199,6 +199,7 @@ void setup() {
   hal::i2cBegin();
   gDisplay.begin(gConfig.settings);
   gDisplay.restore(gConfig.display);
+  gLink.diag = &gDisplay.diag();
 
   gMatrix.begin();
   gEncoder.begin();

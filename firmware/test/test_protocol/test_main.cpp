@@ -192,6 +192,21 @@ void test_build_messages() {
       "{\"type\":\"hello\",\"device\":\"tap32\",\"fw\":\"1.0.0\",\"board\":\"kb2040\","
       "\"keys\":10,\"encoder\":true,\"hid\":true,\"online\":false}",
       buf);
+  // Diagnostyka I²C: OLED znaleziony / brak odpowiedzi.
+  I2cDiag diag;
+  diag.oledAddr = 0x3D;
+  diag.count = 1;
+  diag.devices[0] = 0x3D;
+  buildHello(buf, sizeof(buf), "kb2040", "1.0.0", true, &diag);
+  TEST_ASSERT_NOT_NULL(strstr(buf, "\"oled\":61,\"i2c\":[61]"));
+  diag = I2cDiag();
+  buildHello(buf, sizeof(buf), "kb2040", "1.0.0", true, &diag);
+  TEST_ASSERT_NOT_NULL(strstr(buf, "\"oled\":null,\"i2c\":[]"));
+  diag.sdaLevel = 0;
+  diag.sclLevel = 1;
+  diag.swapped = true;
+  buildHello(buf, sizeof(buf), "kb2040", "1.0.0", true, &diag);
+  TEST_ASSERT_NOT_NULL(strstr(buf, "\"lines\":{\"sda\":0,\"scl\":1},\"swapped\":true"));
   // Za mały bufor → 0.
   TEST_ASSERT_EQUAL(0, buildHello(buf, 10, "kb2040", "1.0.0", false));
 }

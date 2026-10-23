@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <U8g2lib.h>
+#include <Wire.h>
 #include <string.h>
 
 #include "boards/board.h"
@@ -11,7 +12,11 @@ namespace tap32 {
 
 namespace {
 
-U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+// Sprzętowe I²C (Wire) albo programowe – wybór stałą board::kOledSoftI2c (np. gdy na PCB
+// SDA/SCL trafiły na piny, których sprzętowy kontroler I²C nie obsługuje w tej roli).
+U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C hwOled(U8G2_R0, U8X8_PIN_NONE);
+U8G2_SSD1306_128X32_UNIVISION_F_SW_I2C swOled(U8G2_R0, board::kScl, board::kSda, U8X8_PIN_NONE);
+U8G2& u8g2 = board::kOledSoftI2c ? static_cast<U8G2&>(swOled) : static_cast<U8G2&>(hwOled);
 
 // Czcionki: 5x7 mieści 7 znaków w komórce 42 px (siatka 3×3 + pasek tytułu = 32 px).
 const uint8_t* const kFontSmall = u8g2_font_5x7_tf;
@@ -43,10 +48,117 @@ void drawCentered(const char* text, int cx, int baseline) {
   u8g2.drawUTF8(cx - w / 2, baseline, text);
 }
 
+// --- programowe sprawdzenie adresu I²C (linie open-drain emulowane przez INPUT_PULLUP)
+constexpr uint32_t kSoftHalfUs = 5;  // ok. 100 kHz
+
+// Piny programowego I²C (mogą zostać zamienione, jeśli ekran odpowiada odwrotnie).
+uint8_t gSda = board::kSda;
+uint8_t gScl = board::kScl;
+
+void lineLow(uint8_t pin) {
+  digitalWrite(pin, LOW);
+  pinMode(pin, OUTPUT);
+}
+
+void lineRelease(uint8_t pin) { pinMode(pin, INPUT_PULLUP); }
+
+bool softProbe(uint8_t addr) {
+  lineRelease(gSda);
+  lineRelease(gScl);
+  delayMicroseconds(kSoftHalfUs);
+  if (digitalRead(gSda) == LOW || digitalRead(gScl) == LOW) return false;  // zwarcie
+  // START
+  lineLow(gSda);
+  delayMicroseconds(kSoftHalfUs);
+  lineLow(gScl);
+  delayMicroseconds(kSoftHalfUs);
+  // adres + bit zapisu
+  const uint8_t byte = static_cast<uint8_t>(addr << 1);
+  for (int8_t bit = 7; bit >= 0; --bit) {
+    if (byte & (1 << bit)) {
+      lineRelease(gSda);
+    } else {
+      lineLow(gSda);
+    }
+    delayMicroseconds(kSoftHalfUs);
+    lineRelease(gScl);
+    delayMicroseconds(kSoftHalfUs);
+    lineLow(gScl);
+  }
+  // ACK od urządzenia
+  lineRelease(gSda);
+  delayMicroseconds(kSoftHalfUs);
+  lineRelease(gScl);
+  delayMicroseconds(kSoftHalfUs);
+  const bool ack = digitalRead(gSda) == LOW;
+  lineLow(gScl);
+  delayMicroseconds(kSoftHalfUs);
+  // STOP
+  lineLow(gSda);
+  delayMicroseconds(kSoftHalfUs);
+  lineRelease(gScl);
+  delayMicroseconds(kSoftHalfUs);
+  lineRelease(gSda);
+  delayMicroseconds(kSoftHalfUs);
+  return ack;
+}
+
+bool probe(uint8_t addr) {
+  if (board::kOledSoftI2c) return softProbe(addr);
+  Wire.beginTransmission(addr);
+  return Wire.endTransmission() == 0;
+}
+
+void scanBus(I2cDiag& diag) {
+  diag.count = 0;
+  for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
+    if (probe(addr) && diag.count < sizeof(diag.devices)) diag.devices[diag.count++] = addr;
+  }
+}
+
 }  // namespace
 
 bool Display::begin(const Settings& settings) {
-  u8g2.setI2CAddress(static_cast<uint8_t>(settings.oledAddr << 1));
+  // Skan magistrali: diagnostyka i automatyczny wybór adresu (0x3C / 0x3D).
+  diag_ = I2cDiag();
+  if (board::kOledSoftI2c) {
+    // Stan linii bez wewnętrznego pull-upu: wysoki tylko, gdy moduł jest zasilony i ma rezystory.
+    pinMode(board::kSda, INPUT);
+    pinMode(board::kScl, INPUT);
+    delay(2);
+    diag_.sdaLevel = digitalRead(board::kSda) == HIGH ? 1 : 0;
+    diag_.sclLevel = digitalRead(board::kScl) == HIGH ? 1 : 0;
+  }
+  scanBus(diag_);
+  if (board::kOledSoftI2c && diag_.count == 0) {
+    // Nic nie odpowiada – może SDA i SCL są zamienione na płytce lub module.
+    gSda = board::kScl;
+    gScl = board::kSda;
+    scanBus(diag_);
+    if (diag_.count > 0) {
+      diag_.swapped = true;
+    } else {
+      gSda = board::kSda;
+      gScl = board::kScl;
+    }
+  }
+  if (board::kOledSoftI2c) {
+    u8x8_SetPin(u8g2.getU8x8(), U8X8_PIN_I2C_DATA, gSda);
+    u8x8_SetPin(u8g2.getU8x8(), U8X8_PIN_I2C_CLOCK, gScl);
+  }
+  uint8_t addr = settings.oledAddr;
+  if (!probe(addr)) {
+    if (probe(0x3C)) {
+      addr = 0x3C;
+    } else if (probe(0x3D)) {
+      addr = 0x3D;
+    } else {
+      addr = 0;
+    }
+  }
+  diag_.oledAddr = addr;
+
+  u8g2.setI2CAddress(static_cast<uint8_t>((addr != 0 ? addr : settings.oledAddr) << 1));
   ready_ = u8g2.begin();
   u8g2.enableUTF8Print();
   applySettings(settings);

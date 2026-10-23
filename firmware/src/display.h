@@ -34,6 +34,9 @@ class Display {
   void activity(uint32_t nowMs);
   void update(uint32_t nowMs);
 
+  // Wynik skanu I²C z begin() (adres OLED albo 0, gdy ekran nie odpowiada).
+  const I2cDiag& diag() const { return diag_; }
+
  private:
   void draw(uint32_t nowMs);
   void drawSplash();
@@ -64,6 +67,7 @@ class Display {
   bool flashActive_ = false;
 
   TestSnapshot test_;
+  I2cDiag diag_;
 };
 
 }  // namespace tap32

@@ -183,3 +183,28 @@ def test_compute_fallback_from_profile() -> None:
     config.settings.fallback.from_profile = False
     bindings = {str(b.slot): b for b in compute_fallback(profile, config.settings.fallback)}
     assert set(bindings) == {"1", "10", "enc_cw", "enc_ccw"}
+
+
+def test_missing_display_is_logged(platform, clock, sync_executor, caplog) -> None:
+    config = Config()
+    config.ensure_valid()
+    transport = FakeTransport()
+    controller = Controller(config, transport, platform, executor=sync_executor, clock=clock)
+    transport.connect()
+    info = DeviceInfo("tap32", "1.0.1", "kb2040", has_diag=True, oled_addr=None)
+    controller.handle_state(ConnectionState.CONNECTED, info, "COM7")
+    assert "Ekran OLED nie odpowiada" in caplog.text
+
+
+def test_low_line_is_explained(platform, clock, sync_executor, caplog) -> None:
+    config = Config()
+    config.ensure_valid()
+    transport = FakeTransport()
+    controller = Controller(config, transport, platform, executor=sync_executor, clock=clock)
+    transport.connect()
+    info = DeviceInfo(
+        "tap32", "1.0.3", "kb2040", has_diag=True, oled_addr=None, sda_level=0, scl_level=1
+    )
+    controller.handle_state(ConnectionState.CONNECTED, info, "COM3")
+    assert "Linia SDA ma stan niski" in caplog.text
+    assert "Linia SCL" not in caplog.text

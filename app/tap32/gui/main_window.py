@@ -479,7 +479,15 @@ class MainWindow(QMainWindow):
         if connected and info is not None:
             self.status_text.setText(f"Połączono ({port})")
             self.status_board.setText(f"Płytka: {info.board_name}")
-            self.status_fw.setText(f"Firmware: {info.fw}")
+            self.status_fw.setText(f"Firmware: {info.fw} | OLED: {info.oled_status}")
+            if info.has_diag and info.oled_addr is None:
+                self.status_fw.setStyleSheet("color:#e74c3c; font-weight:600;")
+                self.status_fw.setToolTip(
+                    "Ekran nie odpowiada na I²C – szczegóły w zakładce Dziennik"
+                )
+            else:
+                self.status_fw.setStyleSheet("")
+                self.status_fw.setToolTip("")
         else:
             self.status_text.setText("Rozłączono – szukam Tap32…")
             self.status_board.setText("Płytka: —")

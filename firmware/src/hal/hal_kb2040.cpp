@@ -73,6 +73,8 @@ void usbBegin() {
 }
 
 void i2cBegin() {
+  // Programowe I²C (U8g2 SW_I2C) samo steruje pinami – Wire nie może ich zajmować.
+  if (board::kOledSoftI2c) return;
   Wire.setSDA(board::kSda);
   Wire.setSCL(board::kScl);
   Wire.begin();

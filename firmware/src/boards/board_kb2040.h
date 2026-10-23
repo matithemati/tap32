@@ -18,8 +18,11 @@ constexpr uint8_t kEncA = 19;   // MOSI
 constexpr uint8_t kEncB = 20;   // MISO
 constexpr uint8_t kEncSw = 18;  // SCK
 
-constexpr uint8_t kSda = 0;  // I2C0 SDA (D0)
-constexpr uint8_t kScl = 1;  // I2C0 SCL (D1)
+// Na PCB Tap32 SDA jest na GPIO3, a SCL na GPIO2 – odwrotnie niż sprzętowe I2C1 RP2040
+// (GPIO2 może być tylko SDA, GPIO3 tylko SCL), dlatego ekran obsługuje programowe I²C.
+constexpr uint8_t kSda = 3;  // D3
+constexpr uint8_t kScl = 2;  // D2
+constexpr bool kOledSoftI2c = true;
 
 constexpr uint8_t kNeoPixelPin = 17;
 constexpr uint8_t kNeoPixelBrightness = 24;  // niska jasność (0–255)

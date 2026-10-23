@@ -369,7 +369,8 @@ ParseResult parseCommand(const char* line, size_t len, Command& out) {
   return ParseResult{ParseStatus::Ignored, nullptr};
 }
 
-size_t buildHello(char* buf, size_t cap, const char* board, const char* fw, bool online) {
+size_t buildHello(char* buf, size_t cap, const char* board, const char* fw, bool online,
+                  const I2cDiag* diag) {
   JsonDocument doc;
   doc["type"] = "hello";
   doc["device"] = "tap32";
@@ -379,6 +380,23 @@ size_t buildHello(char* buf, size_t cap, const char* board, const char* fw, bool
   doc["encoder"] = true;
   doc["hid"] = true;
   doc["online"] = online;
+  if (diag != nullptr) {
+    if (diag->oledAddr != 0) {
+      doc["oled"] = diag->oledAddr;
+    } else {
+      doc["oled"] = nullptr;  // ekran nie odpowiada
+    }
+    JsonArray devices = doc["i2c"].to<JsonArray>();
+    for (uint8_t i = 0; i < diag->count && i < sizeof(diag->devices); ++i) {
+      devices.add(diag->devices[i]);
+    }
+    if (diag->sdaLevel >= 0 && diag->sclLevel >= 0) {
+      JsonObject lines = doc["lines"].to<JsonObject>();
+      lines["sda"] = diag->sdaLevel;
+      lines["scl"] = diag->sclLevel;
+    }
+    if (diag->swapped) doc["swapped"] = true;
+  }
   return finish(doc, buf, cap);
 }
 
