@@ -154,6 +154,7 @@ class AppSettings(Model):
     autostart: bool = False
     start_minimized: bool = False
     theme: Literal["system", "light", "dark"] = "system"
+    language: Literal["pl", "en"] = "pl"
     flash_on_action: bool = True
     auto_switch: bool = True
 

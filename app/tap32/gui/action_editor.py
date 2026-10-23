@@ -16,15 +16,12 @@ from pydantic import ValidationError
 from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -36,6 +33,9 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.actions import ACTION_TYPES, ActionBase, MacroStep, format_hotkey, parse_hotkey
+from . import theme
+from .i18n import action_summary, tr
+from .widgets import Switch, combo, label, styled
 
 NONE_LABEL = "(brak akcji)"
 
@@ -110,9 +110,10 @@ class HotkeyEdit(QWidget):
     def __init__(self, value: str = "", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.edit = QLineEdit(value)
-        self.edit.setPlaceholderText("np. ctrl+shift+c, win+e, f13")
-        self.button = QPushButton("Nagraj skrót")
+        self.edit.setPlaceholderText(tr("np. ctrl+shift+c, win+e, f13"))
+        self.button = QPushButton(tr("Nagraj skrót"))
         self.button.setCheckable(True)
+        styled(self.button, record=True)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.edit, 1)
@@ -129,12 +130,12 @@ class HotkeyEdit(QWidget):
         if recording:
             self._before = self.edit.text()
             self.edit.setText("")
-            self.edit.setPlaceholderText("Naciśnij kombinację klawiszy…")
+            self.edit.setPlaceholderText(tr("Naciśnij kombinację klawiszy…"))
             self.edit.setFocus()
-            self.button.setText("Anuluj")
+            self.button.setText(tr("Anuluj"))
         else:
-            self.button.setText("Nagraj skrót")
-            self.edit.setPlaceholderText("np. ctrl+shift+c, win+e, f13")
+            self.button.setText(tr("Nagraj skrót"))
+            self.edit.setPlaceholderText(tr("np. ctrl+shift+c, win+e, f13"))
             if not self.edit.text():
                 self.edit.setText(self._before)
 
@@ -175,11 +176,11 @@ class PathEdit(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.edit, 1)
         if kind in ("exe", "path"):
-            b = QPushButton("Plik…")
+            b = QPushButton(tr("Plik…"))
             b.clicked.connect(self._pick_file)
             layout.addWidget(b)
         if kind in ("folder", "path"):
-            b = QPushButton("Folder…")
+            b = QPushButton(tr("Folder…"))
             b.clicked.connect(self._pick_folder)
             layout.addWidget(b)
         self.edit.textChanged.connect(self.changed)
@@ -189,16 +190,16 @@ class PathEdit(QWidget):
 
     def _pick_file(self) -> None:
         filt = (
-            "Programy (*.exe *.bat *.cmd *.lnk);;Wszystkie pliki (*)"
+            tr("Programy (*.exe *.bat *.cmd *.lnk);;Wszystkie pliki (*)")
             if self.kind == "exe"
-            else "Wszystkie pliki (*)"
+            else tr("Wszystkie pliki (*)")
         )
-        path, _ = QFileDialog.getOpenFileName(self, "Wybierz plik", self.edit.text(), filt)
+        path, _ = QFileDialog.getOpenFileName(self, tr("Wybierz plik"), self.edit.text(), filt)
         if path:
             self.edit.setText(path.replace("/", "\\"))
 
     def _pick_folder(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Wybierz folder", self.edit.text())
+        path = QFileDialog.getExistingDirectory(self, tr("Wybierz folder"), self.edit.text())
         if path:
             self.edit.setText(path.replace("/", "\\"))
 
@@ -216,9 +217,11 @@ class MacroEditor(QWidget):
         self.context = context
         self.steps = [MacroStep.model_validate(s.model_dump(mode="json")) for s in steps]
         self.list = QListWidget()
+        self.list.setObjectName("boxed")
         self.list.setMinimumHeight(110)
         self.list.itemDoubleClicked.connect(lambda _: self._edit())
-        buttons = QVBoxLayout()
+        buttons = QHBoxLayout()
+        buttons.setSpacing(4)
         for text, slot in (
             ("Dodaj", self._add),
             ("Edytuj", self._edit),
@@ -226,11 +229,11 @@ class MacroEditor(QWidget):
             ("W górę", lambda: self._move(-1)),
             ("W dół", lambda: self._move(1)),
         ):
-            b = QPushButton(text)
+            b = QPushButton(tr(text))
             b.clicked.connect(slot)
             buttons.addWidget(b)
         buttons.addStretch(1)
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.list, 1)
         layout.addLayout(buttons)
@@ -240,13 +243,13 @@ class MacroEditor(QWidget):
         self.list.clear()
         for i, step in enumerate(self.steps, 1):
             delay = f"  (+{step.delay_ms} ms)" if step.delay_ms else ""
-            self.list.addItem(QListWidgetItem(f"{i}. {step.action.summary()}{delay}"))
+            self.list.addItem(QListWidgetItem(f"{i}. {action_summary(step.action)}{delay}"))
         if select is not None and 0 <= select < len(self.steps):
             self.list.setCurrentRow(select)
 
     def _dialog(self, step: MacroStep | None) -> MacroStep | None:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Krok makra")
+        dialog.setWindowTitle(tr("Krok makra"))
         editor = ActionEditor(self.context, allow_none=False)
         editor.set_action(step.action if step else ACTION_TYPES["hotkey"](type="hotkey"))
         delay = QSpinBox()
@@ -254,7 +257,7 @@ class MacroEditor(QWidget):
         delay.setSuffix(" ms")
         delay.setValue(step.delay_ms if step else 0)
         form = QFormLayout()
-        form.addRow("Opóźnienie po kroku:", delay)
+        form.addRow(tr("Opóźnienie po kroku:"), delay)
         box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -341,38 +344,42 @@ class ActionEditor(QWidget):
         self._getters: dict[str, Callable[[], Any]] = {}
         self._loading = False
 
-        self.type_combo = QComboBox()
+        self.type_combo = combo()
         if allow_none:
-            self.type_combo.addItem(NONE_LABEL, None)
+            self.type_combo.addItem(tr(NONE_LABEL), None)
         for name, cls in ACTION_TYPES.items():
-            self.type_combo.addItem(cls.label, name)
+            self.type_combo.addItem(tr(cls.label), name)
         self.type_combo.currentIndexChanged.connect(self._type_changed)
 
-        self.test_button = QPushButton("Testuj")
-        self.test_button.setToolTip("Wykonaj akcję teraz")
+        self.test_button = QPushButton(tr("Testuj"))
+        self.test_button.setIcon(theme.icon("play"))
+        self.test_button.setToolTip(tr("Wykonaj akcję teraz"))
         self.test_button.clicked.connect(self._test)
         self.test_button.setVisible(context.test_action is not None)
 
-        top = QHBoxLayout()
-        top.addWidget(QLabel("Typ akcji:"))
-        top.addWidget(self.type_combo, 1)
-        top.addWidget(self.test_button)
+        self.summary = label("", "muted")
+        bottom = QHBoxLayout()
+        bottom.addWidget(self.summary, 1)
+        bottom.addWidget(self.test_button)
 
-        self.description = QLabel()
-        self.description.setWordWrap(True)
-        self.description.setStyleSheet("color: palette(mid);")
+        self.description = label("", "hint", wrap=True)
         self.form_host = QWidget()
         self.form = QFormLayout(self.form_host)
         self.form.setContentsMargins(0, 4, 0, 0)
-        self.error = QLabel()
-        self.error.setStyleSheet("color: #e74c3c;")
-        self.error.setWordWrap(True)
+        self.form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        self.form.setVerticalSpacing(6)
+        self.form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.error = label("", "error", wrap=True)
 
         layout = QVBoxLayout(self)
-        layout.addLayout(top)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(label(tr("Typ akcji"), "lbl"))
+        layout.addWidget(self.type_combo)
         layout.addWidget(self.description)
         layout.addWidget(self.form_host)
         layout.addWidget(self.error)
+        layout.addLayout(bottom)
         layout.addStretch(1)
         self.set_action(None)
 
@@ -386,7 +393,7 @@ class ActionEditor(QWidget):
             index = self.type_combo.findData(kind)
             if index < 0:
                 if action is not None:  # nieznany typ – pokaż jako tekst
-                    self.type_combo.addItem(f"{action.type} (nieznany)", action.type)
+                    self.type_combo.addItem(f"{action.type} ({tr('nieznany')})", action.type)
                     index = self.type_combo.count() - 1
                 else:
                     index = 0
@@ -426,17 +433,24 @@ class ActionEditor(QWidget):
         action = self._action
         if action is None or action.type not in ACTION_TYPES:
             self.description.setText("")
+            self.description.setVisible(False)
+            self.summary.setText("")
             self.test_button.setEnabled(False)
             return
         cls = type(action)
-        self.description.setText(cls.description)
+        self.description.setText(tr(cls.description))
+        self.description.setVisible(bool(cls.description))
+        self.summary.setText(action_summary(action))
         self.test_button.setEnabled(True)
         for name, info in cls.model_fields.items():
             if name == "type":
                 continue
             widget, getter = self._make_widget(name, info, getattr(action, name))
             self._getters[name] = getter
-            self.form.addRow(f"{info.title or name}:", widget)
+            if isinstance(widget, Switch):
+                self.form.addRow(widget)
+            else:
+                self.form.addRow(label(tr(info.title or name), "lbl"), widget)
 
     def _make_widget(self, name: str, info: Any, value: Any) -> tuple[QWidget, Callable[[], Any]]:
         extra = info.json_schema_extra if isinstance(info.json_schema_extra, dict) else {}
@@ -458,8 +472,9 @@ class ActionEditor(QWidget):
             t.textChanged.connect(self._field_changed)
             return t, t.toPlainText
         if kind in ("process", "profile"):
-            c = QComboBox()
+            c = combo()
             c.setEditable(kind == "process")
+            c.setMinimumContentsLength(12)
             items = (
                 self.context.profile_names()
                 if kind == "profile"
@@ -480,14 +495,14 @@ class ActionEditor(QWidget):
             return m, m.value
         if literal is not None:
             labels = extra.get("labels", {})
-            c = QComboBox()
+            c = combo()
             for option in literal:
-                c.addItem(str(labels.get(option, option)), option)
+                c.addItem(tr(str(labels.get(option, option))), option)
             c.setCurrentIndex(max(0, c.findData(value)))
             c.currentIndexChanged.connect(self._field_changed)
             return c, c.currentData
         if annotation is bool:
-            b = QCheckBox()
+            b = Switch(tr(info.title or name))
             b.setChecked(bool(value))
             b.toggled.connect(self._field_changed)
             return b, b.isChecked
@@ -527,6 +542,7 @@ class ActionEditor(QWidget):
             self.error.setText(f"{field_name}: {first.get('msg', '')}")
             return
         self.error.clear()
+        self.summary.setText(action_summary(self._action))
         self.changed.emit()
 
     def _test(self) -> None:

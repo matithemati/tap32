@@ -140,3 +140,34 @@ def test_oled_render_all_modes(qtbot) -> None:
     ):
         image = render(screen)
         assert image.width() == 128 and image.height() == 32
+
+
+def test_language_switch_rebuilds_ui(window, qtbot) -> None:
+    from tap32.gui import i18n
+
+    win, controller, device, platform = window
+    win.device_view.tiles[2].clicked.emit(2)
+    win.language_switch.changed.emit("en")
+    qtbot.waitUntil(lambda: win.nav_buttons["config"].text() == "Configuration", timeout=2000)
+    assert controller.config.settings.app.language == "en"
+    assert win.stack.currentWidget() is win.key_editor  # wybór klawisza przetrwał przebudowę
+    tap = win.key_editor.editors["tap"]
+    assert tap.type_combo.currentText() == "Launch program"
+    win.language_switch.changed.emit("pl")
+    qtbot.waitUntil(lambda: win.nav_buttons["config"].text() == "Konfiguracja", timeout=2000)
+    assert i18n.language() == "pl"
+
+
+def test_settings_page_saves_language(window, qtbot) -> None:
+    win, controller, device, platform = window
+    win.open_settings()
+    dialog = win._settings_dialog
+    assert dialog is not None and win.pages.currentWidget() is win.settings_host
+    dialog.language.set_value("en")
+    dialog.hold_ms.setValue(650)
+    dialog._accept()
+    assert controller.config.settings.gestures.hold_ms == 650
+    qtbot.waitUntil(lambda: win.nav_buttons["log"].text() == "Log", timeout=2000)
+    assert win.pages.currentWidget() is win.config_page
+    win.language_switch.changed.emit("pl")
+    qtbot.waitUntil(lambda: win.nav_buttons["log"].text() == "Dziennik", timeout=2000)

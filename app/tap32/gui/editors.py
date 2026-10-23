@@ -7,16 +7,14 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QCheckBox,
     QColorDialog,
-    QComboBox,
-    QFormLayout,
-    QGroupBox,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QPushButton,
+    QStackedWidget,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -25,13 +23,59 @@ from PySide6.QtWidgets import (
 from ..core.actions import ActionBase, make_action
 from ..core.config import KeyBinding, Profile
 from ..core.protocol import ENCODER_KEY, LABEL_CHARS, transliterate
+from . import theme
 from .action_editor import ActionEditor, EditorContext
+from .i18n import tr
+from .widgets import Segmented, Switch, button, combo, frame, hline, label, styled
 
 GESTURE_TABS = (("tap", "Naciśnięcie"), ("hold", "Przytrzymanie"), ("double_tap", "Podwójne"))
 
+SWATCHES = (
+    "#2e7d32",
+    "#1565c0",
+    "#ef6c00",
+    "#6a1b9a",
+    "#37474f",
+    "#c62828",
+    "#00838f",
+    "#4527a0",
+    "#ad1457",
+    "#455a64",
+)
+
+
+def inspector_header(
+    kicker: str, title: QLabel, badge: QLabel | None = None
+) -> tuple[QHBoxLayout, QPushButton]:
+    """Nagłówek panelu: znaczek, nadtytuł, tytuł i przycisk zamknięcia."""
+    row = QHBoxLayout()
+    row.setSpacing(10)
+    if badge is not None:
+        row.addWidget(badge, 0, Qt.AlignmentFlag.AlignTop)
+    col = QVBoxLayout()
+    col.setSpacing(0)
+    col.addWidget(label(kicker.upper(), "kicker"))
+    col.addWidget(title)
+    row.addLayout(col, 1)
+    close = button("", "x", ghost=True)
+    close.setToolTip(tr("Zamknij"))
+    close.setFixedSize(32, 32)
+    row.addWidget(close, 0, Qt.AlignmentFlag.AlignTop)
+    return row, close
+
+
+def _badge_style(badge: QLabel, color: str) -> None:
+    c = QColor(color)
+    # ciemne kolory klawiszy byłyby nieczytelne na ciemnym tle
+    text = theme.tokens()["text"] if theme.is_dark() and c.lightness() < 110 else color
+    badge.setStyleSheet(
+        f"background: rgba({c.red()},{c.green()},{c.blue()},60); color: {text}; "
+        "border-radius: 11px; font-weight: 700;"
+    )
+
 
 class LabelEdit(QWidget):
-    """Etykieta z licznikiem znaków (OLED: 7 znaków)."""
+    """Etykieta z licznikiem znaków (OLED: 7 znaków) i podglądem tekstu na ekranie."""
 
     changed = Signal(str)
 
@@ -39,15 +83,24 @@ class LabelEdit(QWidget):
         super().__init__(parent)
         self.edit = QLineEdit()
         self.edit.setMaxLength(LABEL_CHARS)
-        self.edit.setPlaceholderText("np. Spotify")
-        self.counter = QLabel()
-        self.counter.setMinimumWidth(48)
-        self.preview = QLabel()
-        self.preview.setStyleSheet("color: palette(mid);")
-        layout = QHBoxLayout(self)
+        self.edit.setPlaceholderText(tr("np. Spotify"))
+        self.counter = label("", "muted")
+        self.preview = label("", "oledPreview")
+        head = QHBoxLayout()
+        head.addWidget(label(tr("Etykieta"), "lbl"))
+        head.addStretch(1)
+        head.addWidget(self.counter)
+        foot = QHBoxLayout()
+        foot.setSpacing(8)
+        foot.addWidget(label(tr("Na ekranie:"), "muted"))
+        foot.addWidget(self.preview)
+        foot.addStretch(1)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.edit, 1)
-        layout.addWidget(self.counter)
+        layout.setSpacing(6)
+        layout.addLayout(head)
+        layout.addWidget(self.edit)
+        layout.addLayout(foot)
         self.edit.textChanged.connect(self._changed)
         self._changed(self.edit.text(), emit=False)
 
@@ -59,88 +112,139 @@ class LabelEdit(QWidget):
 
     def _changed(self, text: str, emit: bool = True) -> None:
         self.counter.setText(f"{len(text)}/{LABEL_CHARS}")
-        ascii_text = transliterate(text)
-        self.edit.setToolTip(f"Na ekranie: {ascii_text}" if ascii_text != text else "")
+        self.preview.setText(transliterate(text) or "—")
         if emit:
             self.changed.emit(text)
 
 
-class ColorButton(QPushButton):
+class ColorButton(QWidget):
+    """Paleta kolorów klawisza + kolor własny."""
+
     changed = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._color = "#3c4a5c"
-        self.clicked.connect(self._pick)
-        self.setFixedWidth(90)
+        self._color = "#455a64"
+        self._swatches: dict[str, QPushButton] = {}
+        row = QHBoxLayout()
+        row.setSpacing(5)
+        for c in SWATCHES:
+            b = QPushButton()
+            b.setFixedSize(24, 24)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setToolTip(c)
+            b.clicked.connect(lambda _=False, col=c: self._set(col))
+            self._swatches[c] = b
+            row.addWidget(b)
+        self.custom = QPushButton(tr("Własny…"))
+        self.custom.clicked.connect(self._pick)
+        row.addWidget(self.custom)
+        row.addStretch(1)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(label(tr("Kolor"), "lbl"))
+        layout.addLayout(row)
         self._refresh()
 
     def set_color(self, color: str) -> None:
         self._color = color
         self._refresh()
 
+    def color(self) -> str:
+        return self._color
+
     def _refresh(self) -> None:
-        self.setText(self._color)
-        text = "#000" if QColor(self._color).lightness() > 140 else "#fff"
-        self.setStyleSheet(
-            f"background:{self._color}; color:{text}; border-radius:4px; padding:4px;"
+        ring = theme.tokens()["text"]
+        for c, b in self._swatches.items():
+            selected = c.lower() == self._color.lower()
+            b.setStyleSheet(
+                f"QPushButton {{ background: {c}; border-radius: 7px; padding: 0; min-height: 0;"
+                f" border: 2px solid {ring if selected else 'transparent'}; }}"
+            )
+        custom = self._color.lower() not in self._swatches
+        self.custom.setStyleSheet(
+            f"QPushButton {{ border: 2px solid {self._color}; }}" if custom else ""
         )
 
+    def _set(self, color: str) -> None:
+        self._color = color
+        self._refresh()
+        self.changed.emit(color)
+
     def _pick(self) -> None:
-        color = QColorDialog.getColor(QColor(self._color), self, "Kolor klawisza")
+        color = QColorDialog.getColor(QColor(self._color), self, tr("Kolor klawisza"))
         if color.isValid():
-            self._color = color.name()
-            self._refresh()
-            self.changed.emit(self._color)
+            self._set(color.name())
 
 
 class KeyEditor(QWidget):
     """Etykieta, kolor i akcje gestów tap / hold / double_tap jednego klawisza."""
 
     changed = Signal()
+    closeRequested = Signal()
 
     def __init__(self, context: EditorContext, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.binding: KeyBinding | None = None
-        self.title = QLabel()
-        self.title.setStyleSheet("font-size: 15pt; font-weight: 600;")
+        self.title = label("", "h2")
+        self.badge = label("", "badge")
+        self.badge.setFixedSize(40, 40)
+        self.badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.header = QWidget()
+        head, close = inspector_header(tr("Klawisz"), self.title, self.badge)
+        head.setContentsMargins(0, 0, 0, 0)
+        self.header.setLayout(head)
+        close.clicked.connect(self.closeRequested)
+
         self.label = LabelEdit()
         self.color = ColorButton()
         self.label.changed.connect(self._label_changed)
         self.color.changed.connect(self._color_changed)
 
-        form = QFormLayout()
-        form.addRow("Etykieta:", self.label)
-        form.addRow("Kolor:", self.color)
-
-        self.tabs = QTabWidget()
+        self.gesture_bar = Segmented([(g, tr(t)) for g, t in GESTURE_TABS])
+        self.gesture_bar.changed.connect(self._show_gesture)
+        self.gesture_stack = QStackedWidget()
         self.editors: dict[str, ActionEditor] = {}
-        for gesture, title in GESTURE_TABS:
+        for gesture, _title in GESTURE_TABS:
             editor = ActionEditor(context)
             editor.changed.connect(lambda g=gesture: self._action_changed(g))
             self.editors[gesture] = editor
-            self.tabs.addTab(editor, title)
+            self.gesture_stack.addWidget(editor)
+        self.gesture_bar.set_value("tap")
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self.title)
-        layout.addLayout(form)
-        layout.addWidget(self.tabs, 1)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+        layout.addWidget(self.header)
+        layout.addWidget(self.label)
+        layout.addWidget(self.color)
+        layout.addWidget(self.gesture_bar, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(hline())
+        layout.addWidget(self.gesture_stack, 1)
 
     def bind(self, key: int, binding: KeyBinding) -> None:
         self.binding = binding
-        self.title.setText(f"Klawisz K{key}" if key != ENCODER_KEY else "Przycisk pokrętła")
+        self.title.setText(
+            f"{tr('Klawisz')} K{key}" if key != ENCODER_KEY else tr("Przycisk pokrętła")
+        )
+        self.badge.setText(f"K{key}" if key != ENCODER_KEY else "◎")
         self.label.set_text(binding.label)
         self.color.set_color(binding.color)
+        _badge_style(self.badge, binding.color)
         for gesture, editor in self.editors.items():
             editor.set_action(binding.action_for(gesture))
         self._update_tab_titles()
 
+    def _show_gesture(self, gesture: str) -> None:
+        self.gesture_stack.setCurrentWidget(self.editors[gesture])
+
     def _update_tab_titles(self) -> None:
         if self.binding is None:
             return
-        for i, (gesture, title) in enumerate(GESTURE_TABS):
-            mark = " ●" if self.binding.action_for(gesture) else ""
-            self.tabs.setTabText(i, title + mark)
+        for gesture, title in GESTURE_TABS:
+            mark = "  ●" if self.binding.action_for(gesture) else ""
+            self.gesture_bar.set_text(gesture, tr(title) + mark)
 
     def _label_changed(self, text: str) -> None:
         if self.binding is not None:
@@ -150,6 +254,7 @@ class KeyEditor(QWidget):
     def _color_changed(self, color: str) -> None:
         if self.binding is not None:
             self.binding.color = color
+            _badge_style(self.badge, color)
             self.changed.emit()
 
     def _action_changed(self, gesture: str) -> None:
@@ -221,49 +326,69 @@ class EncoderEditor(QWidget):
     """Obroty (zwykłe i z wciśniętym przyciskiem), gesty przycisku i szybkie presety."""
 
     changed = Signal()
+    closeRequested = Signal()
 
     def __init__(self, context: EditorContext, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.context = context
         self.profile: Profile | None = None
-        title = QLabel("Pokrętło")
-        title.setStyleSheet("font-size: 15pt; font-weight: 600;")
+        badge = label("◎", "badge")
+        badge.setFixedSize(40, 40)
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        _badge_style(badge, theme.tokens()["accent"])
+        head, close = inspector_header(tr("Pokrętło"), label(tr("Pokrętło"), "h2"), badge)
+        close.clicked.connect(self.closeRequested)
 
-        presets = QGroupBox("Szybkie presety")
-        self.preset_combo = QComboBox()
-        for key, label in PRESETS:
-            self.preset_combo.addItem(label, key)
-        self.preset_target = QComboBox()
-        self.preset_target.addItem("Obrót bez wciśnięcia", "")
-        self.preset_target.addItem("Obrót z wciśniętym przyciskiem", "press_")
-        self.process_combo = QComboBox()
+        presets = frame("soft")
+        self.preset_combo = combo()
+        for key, text in PRESETS:
+            self.preset_combo.addItem(tr(text), key)
+        self.preset_target = combo()
+        self.preset_target.addItem(tr("Obrót bez wciśnięcia"), "")
+        self.preset_target.addItem(tr("Obrót z wciśniętym przyciskiem"), "press_")
+        self.process_combo = combo()
         self.process_combo.setEditable(True)
-        self.process_combo.setPlaceholderText("proces, np. spotify.exe")
-        apply = QPushButton("Zastosuj")
+        self.process_combo.lineEdit().setPlaceholderText(tr("proces, np. spotify.exe"))
+        apply = button(tr("Zastosuj"), primary=True)
         apply.clicked.connect(self._apply_preset)
         self.preset_combo.currentIndexChanged.connect(self._preset_changed)
-        row = QHBoxLayout(presets)
-        row.addWidget(self.preset_combo, 2)
-        row.addWidget(self.process_combo, 2)
-        row.addWidget(self.preset_target, 2)
-        row.addWidget(apply)
+        grid = QGridLayout(presets)
+        grid.setContentsMargins(14, 12, 14, 14)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+        grid.addWidget(label(tr("Szybkie presety"), "strong"), 0, 0, 1, 2)
+        grid.addWidget(self.preset_target, 1, 0)
+        grid.addWidget(self.preset_combo, 1, 1)
+        grid.addWidget(self.process_combo, 2, 0)
+        grid.addWidget(apply, 2, 1, Qt.AlignmentFlag.AlignRight)
         self._preset_changed()
 
         self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
         self.editors: dict[str, ActionEditor] = {}
-        for gesture, label in ENCODER_TABS:
+        for gesture, text in ENCODER_TABS:
             editor = ActionEditor(context)
             editor.changed.connect(lambda g=gesture: self._action_changed(g))
             self.editors[gesture] = editor
-            self.tabs.addTab(editor, label)
+            page = QWidget()
+            pl = QVBoxLayout(page)
+            pl.setContentsMargins(0, 14, 0, 0)
+            pl.addWidget(editor)
+            self.tabs.addTab(page, tr(text))
 
         self.button_editor = KeyEditor(context)
-        self.button_editor.title.hide()
+        self.button_editor.header.hide()
         self.button_editor.changed.connect(self.changed)
-        self.tabs.addTab(self.button_editor, "Przycisk")
+        page = QWidget()
+        pl = QVBoxLayout(page)
+        pl.setContentsMargins(0, 14, 0, 0)
+        pl.addWidget(self.button_editor)
+        self.tabs.addTab(page, tr("Przycisk"))
 
         layout = QVBoxLayout(self)
-        layout.addWidget(title)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+        layout.addLayout(head)
         layout.addWidget(presets)
         layout.addWidget(self.tabs, 1)
 
@@ -277,9 +402,9 @@ class EncoderEditor(QWidget):
     def _update_tab_titles(self) -> None:
         if self.profile is None:
             return
-        for i, (gesture, label) in enumerate(ENCODER_TABS):
+        for i, (gesture, text) in enumerate(ENCODER_TABS):
             mark = " ●" if self.profile.encoder.action_for(gesture) else ""
-            self.tabs.setTabText(i, label + mark)
+            self.tabs.setTabText(i, tr(text) + mark)
 
     def _action_changed(self, gesture: str) -> None:
         if self.profile is not None:
@@ -318,52 +443,66 @@ class ProfileEditor(QWidget):
         super().__init__(parent)
         self.profile: Profile | None = None
         self._running = running_processes
-        title = QLabel("Profil")
-        title.setStyleSheet("font-size: 15pt; font-weight: 600;")
         self.name = QLineEdit()
         self.name.editingFinished.connect(self._rename)
-        self.default = QCheckBox("Profil domyślny (start aplikacji)")
+        self.default = Switch(tr("Profil domyślny (start aplikacji)"))
         self.default.toggled.connect(self._default_toggled)
         self._is_default_cb: Callable[[Profile], bool] = lambda p: False
         self._set_default_cb: Callable[[Profile], None] = lambda p: None
 
-        group = QGroupBox("Automatyczne przełączanie – gdy aktywne jest okno procesu:")
+        group = frame("outlined")
         self.processes = QListWidget()
-        self.add_combo = QComboBox()
+        self.processes.setObjectName("boxed")
+        self.processes.setMinimumHeight(140)
+        self.add_combo = combo()
         self.add_combo.setEditable(True)
-        self.add_combo.setPlaceholderText("np. obs64.exe")
-        refresh = QPushButton("↻")
-        refresh.setToolTip("Odśwież listę uruchomionych procesów")
-        refresh.setFixedWidth(32)
+        self.add_combo.lineEdit().setPlaceholderText(tr("np. obs64.exe"))
+        self.add_combo.setMinimumContentsLength(10)
+        refresh = button("", "refresh")
+        refresh.setToolTip(tr("Odśwież listę uruchomionych procesów"))
+        refresh.setFixedWidth(36)
         refresh.clicked.connect(self._refresh_running)
-        add = QPushButton("Dodaj")
+        add = button(tr("Dodaj"), primary=True)
         add.clicked.connect(self._add_process)
-        remove = QPushButton("Usuń")
+        remove = button(tr("Usuń"))
         remove.clicked.connect(self._remove_process)
         row = QHBoxLayout()
+        row.setSpacing(6)
         row.addWidget(self.add_combo, 1)
         row.addWidget(refresh)
         row.addWidget(add)
         row.addWidget(remove)
         g = QVBoxLayout(group)
-        g.addWidget(self.processes)
+        g.setContentsMargins(14, 12, 14, 14)
+        g.setSpacing(8)
+        g.addWidget(label(tr("Automatyczne przełączanie"), "strong"))
+        g.addWidget(
+            label(
+                tr("Profil włącza się, gdy aktywne jest okno jednego z tych procesów."),
+                "hint",
+                wrap=True,
+            )
+        )
+        g.addWidget(self.processes, 1)
         g.addLayout(row)
 
-        hint = QLabel(
-            "Kliknij klawisz lub pokrętło na podglądzie, aby edytować akcje. "
-            "Fizyczne naciśnięcia podświetlają elementy na żywo."
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: palette(mid);")
+        title_col = QVBoxLayout()
+        title_col.setSpacing(0)
+        title_col.addWidget(label(tr("Profil").upper(), "kicker"))
+        title_col.addWidget(label(tr("Właściwości profilu"), "h2"))
 
-        form = QFormLayout()
-        form.addRow("Nazwa:", self.name)
-        form.addRow("", self.default)
+        name_col = QVBoxLayout()
+        name_col.setSpacing(6)
+        name_col.addWidget(label(tr("Nazwa"), "lbl"))
+        name_col.addWidget(self.name)
+
         layout = QVBoxLayout(self)
-        layout.addWidget(title)
-        layout.addLayout(form)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
+        layout.addLayout(title_col)
+        layout.addLayout(name_col)
+        layout.addWidget(self.default)
         layout.addWidget(group, 1)
-        layout.addWidget(hint)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
     def set_default_handlers(
@@ -421,3 +560,6 @@ class ProfileEditor(QWidget):
         self.profile.processes = processes
         self.processes.takeItem(row)
         self.changed.emit()
+
+
+__all__ = ["ColorButton", "EncoderEditor", "KeyEditor", "LabelEdit", "ProfileEditor", "styled"]

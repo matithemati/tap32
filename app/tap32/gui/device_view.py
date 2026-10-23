@@ -6,14 +6,28 @@ import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPaintEvent, QPen
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QHBoxLayout,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
+from ..core.actions import ActionBase
 from ..core.config import Profile
 from ..core.protocol import ENCODER_KEY
+from . import theme
+from .i18n import action_summary, tr
 from .oled import OledView
+from .widgets import frame, label
 
-SELECT_COLOR = QColor("#4fc3f7")
-PRESS_COLOR = QColor("#ffd54f")
+
+def _font(base: QFont, size: float, bold: bool = False) -> QFont:
+    f = QFont(base)
+    f.setPointSizeF(size)
+    f.setBold(bold)
+    return f
 
 
 class KeyTile(QWidget):
@@ -23,76 +37,118 @@ class KeyTile(QWidget):
         super().__init__(parent)
         self.key = key
         self.label = ""
-        self.color = QColor("#3c4a5c")
+        self.summary = ""
+        self.color = QColor("#455A64")
         self.gestures: list[str] = []
         self.selected = False
+        self.hovered = False
         self.pressed_flash = 0.0
-        self.setMinimumSize(92, 82)
+        self.setMinimumSize(120, 96)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip(f"Klawisz K{key}")
+        self.setToolTip(f"{tr('Klawisz')} K{key}")
 
-    def set_binding(self, label: str, color: str, gestures: list[str]) -> None:
+    def set_binding(self, label: str, color: str, gestures: list[str], summary: str = "") -> None:
         self.label = label
-        self.color = QColor(color) if QColor(color).isValid() else QColor("#3c4a5c")
+        self.color = QColor(color) if QColor(color).isValid() else QColor("#455A64")
         self.gestures = gestures
+        self.summary = summary
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.key)
 
+    def enterEvent(self, event: object) -> None:
+        self.hovered = True
+        self.update()
+
+    def leaveEvent(self, event: object) -> None:
+        self.hovered = False
+        self.update()
+
     def paintEvent(self, event: QPaintEvent) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect()).adjusted(4, 4, -4, -4)
-        # „cap” klawisza
-        base = self.color
+        surface = theme.color("surface")
+        tint = QColor(self.color)
+        tint.setAlpha(46 if theme.is_dark() else 22)
+        # podświetlenie fizycznego naciśnięcia
         if self.pressed_flash > 0:
-            base = base.lighter(100 + int(80 * self.pressed_flash))
+            glow = theme.color("accent")
+            glow.setAlpha(int(70 * self.pressed_flash))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(glow)
+            p.drawRoundedRect(rect.adjusted(-4, -4, 4, 4), 17, 17)
+        p.setPen(QPen(theme.color("border"), 1))
+        p.setBrush(surface)
+        p.drawRoundedRect(rect, 14, 14)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(base.darker(160))
-        p.drawRoundedRect(rect, 10, 10)
-        p.setBrush(base)
-        p.drawRoundedRect(rect.adjusted(5, 3, -5, -9), 8, 8)
-        if self.selected or self.pressed_flash > 0:
-            pen = QPen(PRESS_COLOR if self.pressed_flash > 0 else SELECT_COLOR, 3)
-            p.setPen(pen)
+        p.setBrush(tint)
+        p.drawRoundedRect(rect, 14, 14)
+        if self.hovered and not self.selected:
+            p.setPen(QPen(theme.color("faint"), 1))
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(rect, 10, 10)
-        # numer
-        p.setPen(QColor(255, 255, 255, 140))
-        small = QFont(self.font())
-        small.setPointSizeF(max(7.0, small.pointSizeF() * 0.8))
+            p.drawRoundedRect(rect, 14, 14)
+        if self.selected or self.pressed_flash > 0:
+            ring = theme.color("accent") if self.pressed_flash > 0 else theme.color("text")
+            p.setPen(QPen(ring, 2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 13, 13)
+
+        pad = 12
+        inner = rect.adjusted(pad, 10, -pad, -10)
+        # kropka koloru + numer
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(self.color)
+        p.drawRoundedRect(QRectF(inner.left(), inner.top() + 4, 8, 8), 3, 3)
+        small = _font(self.font(), 8, bold=True)
         p.setFont(small)
+        p.setPen(theme.color("sub"))
         p.drawText(
-            rect.adjusted(10, 6, -8, -8),
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+            QRectF(inner.left() + 14, inner.top(), 60, 16),
+            int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
             f"K{self.key}",
         )
-        # etykieta
-        label_font = QFont(self.font())
-        label_font.setBold(True)
-        label_font.setPointSizeF(label_font.pointSizeF() * 1.15)
-        p.setFont(label_font)
-        p.setPen(QColor("#ffffff"))
-        p.drawText(rect.adjusted(6, 0, -6, -10), Qt.AlignmentFlag.AlignCenter, self.label or "—")
         # znaczniki gestów
         badges = {"tap": "T", "hold": "H", "double_tap": "2×"}
-        x = rect.right() - 8
-        p.setFont(small)
+        x = inner.right()
         for g in reversed(["tap", "hold", "double_tap"]):
             if g not in self.gestures:
                 continue
             text = badges[g]
-            w = 14 + 5 * (len(text) - 1)
-            badge = QRectF(x - w, rect.bottom() - 24, w, 13)
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(0, 0, 0, 110))
-            p.drawRoundedRect(badge, 4, 4)
-            p.setPen(QColor("#e0f7fa"))
+            w = 20 + 5 * (len(text) - 1)
+            badge = QRectF(x - w, inner.top(), w, 17)
+            p.setPen(QPen(theme.color("border"), 1))
+            p.setBrush(theme.color("surface"))
+            p.drawRoundedRect(badge, 5, 5)
+            p.setPen(theme.color("sub"))
+            p.setFont(_font(self.font(), 7.5, bold=True))
             p.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
-            x -= w + 3
+            x -= w + 4
+        # etykieta i opis akcji
+        label_font = _font(self.font(), 12.5, bold=True)
+        sum_font = _font(self.font(), 8.5)
+        sum_h = 16 if self.summary else 0
+        p.setFont(label_font)
+        p.setPen(theme.color("text"))
+        p.drawText(
+            QRectF(inner.left(), inner.bottom() - sum_h - 26, inner.width(), 26),
+            int(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft),
+            self.label or "—",
+        )
+        if self.summary:
+            p.setFont(sum_font)
+            p.setPen(theme.color("sub"))
+            text = p.fontMetrics().elidedText(
+                self.summary, Qt.TextElideMode.ElideRight, int(inner.width())
+            )
+            p.drawText(
+                QRectF(inner.left(), inner.bottom() - sum_h, inner.width(), sum_h),
+                int(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft),
+                text,
+            )
 
 
 class KnobWidget(QWidget):
@@ -103,10 +159,11 @@ class KnobWidget(QWidget):
         self.angle = 0.0
         self.pressed = False
         self.selected = False
+        self.hovered = False
         self.flash = 0.0
-        self.setFixedSize(108, 108)
+        self.setFixedSize(116, 116)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Pokrętło (obrót, przycisk = klawisz 10)")
+        self.setToolTip(tr("Pokrętło (obrót, przycisk = klawisz 10)"))
 
     def rotate(self, steps: int) -> None:
         self.angle = (self.angle + steps * 18) % 360
@@ -117,36 +174,57 @@ class KnobWidget(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
 
+    def enterEvent(self, event: object) -> None:
+        self.hovered = True
+        self.update()
+
+    def leaveEvent(self, event: object) -> None:
+        self.hovered = False
+        self.update()
+
     def paintEvent(self, event: QPaintEvent) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         c = QPointF(self.width() / 2, self.height() / 2)
         r = min(self.width(), self.height()) / 2 - 6
-        if self.selected or self.pressed or self.flash > 0:
-            color = PRESS_COLOR if (self.pressed or self.flash > 0) else SELECT_COLOR
-            p.setPen(QPen(color, 3))
+        active = self.pressed or self.flash > 0
+        if self.selected or active or self.hovered:
+            ring = (
+                theme.color("accent")
+                if active
+                else theme.color("text" if self.selected else "faint")
+            )
+            p.setPen(QPen(ring, 2 if (self.selected or active) else 1))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawEllipse(c, r + 3, r + 3)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#5f6b7a").darker(130 if self.pressed else 100))
+        p.setBrush(theme.color("knob_ring"))
         p.drawEllipse(c, r, r)
-        p.setBrush(QColor("#8996a5"))
-        p.drawEllipse(c, r * 0.78, r * 0.78)
-        # rowki
-        p.setPen(QPen(QColor(0, 0, 0, 60), 1.5))
-        for i in range(24):
-            a = math.radians(i * 15 + self.angle)
+        tick = QPen(theme.color("knob_tick"), 2)
+        tick.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(tick)
+        for i in range(8):
+            a = math.radians(i * 45)
             p.drawLine(
-                QPointF(c.x() + math.sin(a) * r * 0.8, c.y() - math.cos(a) * r * 0.8),
-                QPointF(c.x() + math.sin(a) * r * 0.97, c.y() - math.cos(a) * r * 0.97),
+                QPointF(c.x() + math.sin(a) * r * 0.82, c.y() - math.cos(a) * r * 0.82),
+                QPointF(c.x() + math.sin(a) * r * 0.94, c.y() - math.cos(a) * r * 0.94),
             )
+        face = theme.color("knob_face")
+        if self.pressed:
+            face = face.darker(108)
+        p.setPen(QPen(theme.color("border"), 1))
+        p.setBrush(face)
+        p.drawEllipse(c, r * 0.7, r * 0.7)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(theme.color("knob_inner"))
+        p.drawEllipse(c, r * 0.55, r * 0.55)
         a = math.radians(self.angle)
-        pointer = QPen(QColor("#ffffff"), 4)
+        pointer = QPen(theme.color("text"), 4)
         pointer.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pointer)
         p.drawLine(
             QPointF(c.x() + math.sin(a) * r * 0.25, c.y() - math.cos(a) * r * 0.25),
-            QPointF(c.x() + math.sin(a) * r * 0.65, c.y() - math.cos(a) * r * 0.65),
+            QPointF(c.x() + math.sin(a) * r * 0.6, c.y() - math.cos(a) * r * 0.6),
         )
 
 
@@ -157,16 +235,43 @@ class DeviceView(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.oled = OledView(scale=3)
+        self.oled.setStyleSheet("background: transparent; border: none;")
         self.knob = KnobWidget()
         self.knob.clicked.connect(self._select_encoder)
 
+        self.mode_chip = label("", "chip")
+        oled_head = QHBoxLayout()
+        oled_head.setSpacing(8)
+        oled_head.addWidget(label(tr("Ekran OLED"), "lbl"))
+        oled_head.addWidget(self.mode_chip)
+        oled_head.addStretch(1)
+        oled_frame = frame("oled")
+        of = QHBoxLayout(oled_frame)
+        of.setContentsMargins(10, 10, 10, 10)
+        of.addWidget(self.oled, 0, Qt.AlignmentFlag.AlignCenter)
+        oled_col = QVBoxLayout()
+        oled_col.setSpacing(8)
+        oled_col.addLayout(oled_head)
+        oled_col.addWidget(oled_frame, 0, Qt.AlignmentFlag.AlignLeft)
+        oled_col.addStretch(1)
+
+        self.knob_title = label(tr("Pokrętło"), "strong")
+        self.knob_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.knob_summary = label("", "muted")
+        self.knob_summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        knob_col = QVBoxLayout()
+        knob_col.setSpacing(4)
+        knob_col.addWidget(self.knob, 0, Qt.AlignmentFlag.AlignHCenter)
+        knob_col.addWidget(self.knob_title)
+        knob_col.addWidget(self.knob_summary)
+
         top = QHBoxLayout()
-        top.addWidget(self.oled, 0, Qt.AlignmentFlag.AlignVCenter)
-        top.addStretch(1)
-        top.addWidget(self.knob, 0, Qt.AlignmentFlag.AlignVCenter)
+        top.setSpacing(16)
+        top.addLayout(oled_col, 1)
+        top.addLayout(knob_col)
 
         grid = QGridLayout()
-        grid.setSpacing(6)
+        grid.setSpacing(8)
         self.tiles: dict[int, KeyTile] = {}
         for k in range(1, 10):
             tile = KeyTile(k)
@@ -175,8 +280,9 @@ class DeviceView(QWidget):
             grid.addWidget(tile, (k - 1) // 3, (k - 1) % 3)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
         layout.addLayout(top)
-        layout.addSpacing(8)
         layout.addLayout(grid, 1)
         self.setStyleSheet("DeviceView { background: transparent; }")
 
@@ -187,12 +293,32 @@ class DeviceView(QWidget):
 
     # ------------------------------------------------------------------ dane
 
+    def set_display_mode(self, mode: str) -> None:
+        self.mode_chip.setText(
+            tr("Siatka etykiet 3×3") if mode == "grid" else tr("Duża nazwa profilu")
+        )
+
     def set_profile(self, profile: Profile) -> None:
         for k, tile in self.tiles.items():
             binding = profile.keys[k]
             gestures = [g for g in ("tap", "hold", "double_tap") if binding.action_for(g)]
-            tile.set_binding(binding.label, binding.color, gestures)
-        self.knob.setToolTip(f"Pokrętło – przycisk: {profile.keys[ENCODER_KEY].label or '—'}")
+            first: ActionBase | None = next(
+                (
+                    binding.action_for(g)
+                    for g in ("tap", "hold", "double_tap")
+                    if binding.action_for(g)
+                ),
+                None,
+            )
+            tile.set_binding(
+                binding.label, binding.color, gestures, action_summary(first) if first else ""
+            )
+        enc = profile.encoder
+        parts = [action_summary(a) for a in (enc.rotate_ccw, enc.rotate_cw) if a is not None]
+        self.knob_summary.setText(" / ".join(parts))
+        self.knob.setToolTip(
+            f"{tr('Pokrętło – przycisk:')} {profile.keys[ENCODER_KEY].label or '—'}"
+        )
 
     def select(self, key: int | None) -> None:
         """key 1..9, ENCODER_KEY (pokrętło) albo None."""

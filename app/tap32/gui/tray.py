@@ -6,6 +6,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon, QWidget
 
+from .i18n import tr
 from .icons import app_icon
 
 
@@ -17,24 +18,31 @@ class TrayIcon(QSystemTrayIcon):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(app_icon("disconnected"), parent)
-        self.setToolTip("Tap32 – rozłączono")
+        self.setToolTip(tr("Tap32 – rozłączono"))
         self.menu = QMenu()
-        open_action = self.menu.addAction("Otwórz Tap32")
-        open_action.triggered.connect(self.openRequested)
-        self.menu.setDefaultAction(open_action)
-        self.profiles_menu = self.menu.addMenu("Profil")
+        self.open_action = self.menu.addAction("")
+        self.open_action.triggered.connect(self.openRequested)
+        self.menu.setDefaultAction(self.open_action)
+        self.profiles_menu = self.menu.addMenu("")
         self._profile_group = QActionGroup(self)
         self._profile_group.setExclusive(True)
-        self.pause_action = self.menu.addAction("Wstrzymaj akcje")
+        self.pause_action = self.menu.addAction("")
         self.pause_action.setCheckable(True)
         self.pause_action.toggled.connect(self.pauseToggled)
         self.menu.addSeparator()
-        quit_action = self.menu.addAction("Zakończ")
-        quit_action.triggered.connect(self.quitRequested)
+        self.quit_action = self.menu.addAction("")
+        self.quit_action.triggered.connect(self.quitRequested)
         self.setContextMenu(self.menu)
         self.activated.connect(self._activated)
         self._status = "disconnected"
         self._paused = False
+        self.retranslate()
+
+    def retranslate(self) -> None:
+        self.open_action.setText(tr("Otwórz Tap32"))
+        self.profiles_menu.setTitle(tr("Profil"))
+        self.pause_action.setText(tr("Wstrzymaj akcje"))
+        self.quit_action.setText(tr("Zakończ"))
 
     def _activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason in (
