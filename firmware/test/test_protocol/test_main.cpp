@@ -6,6 +6,7 @@
 #include "device_config.h"
 #include "hid_codes.h"
 #include "protocol_codec.h"
+#include "time_util.h"
 
 using namespace tap32;
 
@@ -276,6 +277,14 @@ void test_debouncer() {
   TEST_ASSERT_FALSE(d.pressed());
 }
 
+void test_elapsed_handles_future_and_wraparound() {
+  TEST_ASSERT_FALSE(elapsed(1000, 1001, 3000));  // znacznik o 1 ms „z przyszłości” – nie timeout
+  TEST_ASSERT_FALSE(elapsed(3999, 1000, 3000));
+  TEST_ASSERT_TRUE(elapsed(4000, 1000, 3000));
+  TEST_ASSERT_FALSE(elapsed(5, 0xFFFFFFF0u, 3000));  // przepełnienie millis()
+  TEST_ASSERT_TRUE(elapsed(3000, 0xFFFFFFF0u, 3000));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_invalid_json);
@@ -298,5 +307,6 @@ int main(int, char**) {
   RUN_TEST(test_config_roundtrip);
   RUN_TEST(test_config_corrupted_uses_defaults);
   RUN_TEST(test_debouncer);
+  RUN_TEST(test_elapsed_handles_future_and_wraparound);
   return UNITY_END();
 }

@@ -13,6 +13,7 @@
 #include "protocol.h"
 #include "protocol_codec.h"
 #include "settings.h"
+#include "time_util.h"
 
 using namespace tap32;
 
@@ -152,7 +153,8 @@ void onLine(const char* line, size_t len) {
 }
 
 void updateHeartbeat(uint32_t now) {
-  const bool alive = gEverRx && (now - gLastRx) < kHeartbeatTimeoutMs;
+  // gLastRx bywa o 1 ms późniejszy niż `now` z początku obiegu – stąd elapsed() ze znakiem.
+  const bool alive = gEverRx && !elapsed(now, gLastRx, kHeartbeatTimeoutMs);
   setOnline(alive);
 }
 

@@ -7,6 +7,7 @@
 
 #include "boards/board.h"
 #include "config.h"
+#include "time_util.h"
 
 namespace tap32 {
 
@@ -252,7 +253,7 @@ void Display::update(uint32_t nowMs) {
 
   // Wygaszacz (nie w trybie testu).
   if (!sleeping_ && !testMode_ && screensaverS_ > 0 &&
-      nowMs - lastActivity_ >= static_cast<uint32_t>(screensaverS_) * 1000UL) {
+      elapsed(nowMs, lastActivity_, static_cast<uint32_t>(screensaverS_) * 1000UL)) {
     sleeping_ = true;
     u8g2.setPowerSave(1);
     return;

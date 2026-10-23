@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "hal/hal.h"
+#include "time_util.h"
 
 namespace tap32 {
 
@@ -23,7 +24,7 @@ void ConfigStore::markDirty(uint32_t nowMs) {
 }
 
 bool ConfigStore::update(const DeviceConfig& cfg, uint32_t nowMs) {
-  if (!dirty_ || nowMs - dirtySince_ < kConfigSaveDelayMs) return false;
+  if (!dirty_ || !elapsed(nowMs, dirtySince_, kConfigSaveDelayMs)) return false;
   return flush(cfg);
 }
 
