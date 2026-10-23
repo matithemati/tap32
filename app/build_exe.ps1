@@ -1,4 +1,4 @@
-# Buduje dist\Tap32.exe (PyInstaller, jeden plik).
+﻿# Buduje dist\Tap32.exe (PyInstaller, jeden plik).
 # Użycie (PowerShell, w katalogu app):  .\build_exe.ps1
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
