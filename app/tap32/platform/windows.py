@@ -15,7 +15,7 @@ from typing import Any
 
 import psutil
 
-from .base import PlatformBackend, PlatformError
+from .base import PlatformBackend, PlatformError, pick_window
 
 log = logging.getLogger("tap32.platform")
 
@@ -90,7 +90,7 @@ class WindowsPlatform(PlatformBackend):
             argv = [path, *shlex.split(args, posix=False)] if args else [path]
             subprocess.Popen(argv, cwd=cwd or None, close_fds=True)
 
-    def focus_process(self, exe_name: str) -> bool:
+    def focus_process(self, exe_name: str, cycle: bool = False) -> bool:
         import win32con
         import win32gui
         import win32process
@@ -112,10 +112,10 @@ class WindowsPlatform(PlatformBackend):
                     windows.append(hwnd)
             return True
 
-        win32gui.EnumWindows(collect, None)
-        if not windows:
+        win32gui.EnumWindows(collect, None)  # kolejność Z: od ostatnio używanego
+        hwnd = pick_window(windows, win32gui.GetForegroundWindow(), cycle)
+        if hwnd is None:
             return False  # proces działa w tle bez okna – uruchomimy nową instancję
-        hwnd = windows[0]
         try:
             if win32gui.IsIconic(hwnd):
                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)

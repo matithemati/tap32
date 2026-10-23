@@ -20,7 +20,8 @@ docs/       PROTOCOL.md, WIRING.md
 
 - **Gesty**: naciśnięcie, przytrzymanie (próg 500 ms), podwójne naciśnięcie (okno 300 ms);
   pokrętło: obrót w prawo/lewo i obrót z wciśniętym przyciskiem, opcjonalne przyspieszenie.
-- **Akcje**: uruchom program (albo przełącz na jego okno), otwórz plik/folder, adres WWW,
+- **Akcje**: uruchom program (albo przełącz na jego okno; przy kilku oknach kolejne naciśnięcia
+  przechodzą między nimi), otwórz plik/folder, adres WWW,
   skrót klawiszowy (także Win, F13–F24), wpisz tekst (Unicode), multimedia, głośność
   systemu i pojedynczego programu, przewijanie, polecenie cmd/PowerShell, makro, zmiana
   profilu, warstwa (profil na czas trzymania klawisza), blokada komputera, wyłączenie ekranu.

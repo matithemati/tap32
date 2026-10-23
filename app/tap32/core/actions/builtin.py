@@ -72,13 +72,16 @@ class LaunchAction(ActionBase):
     args: str = Field("", title="Argumenty")
     cwd: str = Field("", title="Katalog roboczy", json_schema_extra={"widget": "folder"})
     focus_if_running: bool = Field(True, title="Jeśli już działa, przełącz na jego okno")
+    cycle_windows: bool = Field(
+        True, title="Kolejne naciśnięcia przełączają między oknami programu"
+    )
     encoder_repeat: ClassVar[bool] = False
 
     def run(self, ctx: ActionContext) -> None:
         if not self.path:
             raise ValueError("nie podano programu")
         exe_name = self.path.replace("/", "\\").rsplit("\\", 1)[-1]
-        if self.focus_if_running and ctx.platform.focus_process(exe_name):
+        if self.focus_if_running and ctx.platform.focus_process(exe_name, cycle=self.cycle_windows):
             return
         ctx.platform.launch(self.path, self.args, self.cwd)
 

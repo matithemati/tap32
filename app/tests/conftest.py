@@ -27,9 +27,9 @@ class FakePlatform(PlatformBackend):
     def launch(self, path: str, args: str = "", cwd: str = "") -> None:
         self.calls.append(("launch", path, args, cwd))
 
-    def focus_process(self, exe_name: str) -> bool:
+    def focus_process(self, exe_name: str, cycle: bool = False) -> bool:
         if exe_name.lower() in self.running:
-            self.calls.append(("focus", exe_name))
+            self.calls.append(("focus", exe_name, cycle))
             return True
         return False
 

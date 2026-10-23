@@ -48,7 +48,10 @@ def test_launch_focuses_running(platform: FakePlatform, host: FakeHost) -> None:
     platform.calls.clear()
     platform.running.add("app.exe")
     action.execute(ctx(platform, host))
-    assert platform.calls == [("focus", "app.exe")]
+    assert platform.calls == [("focus", "app.exe", True)]
+    platform.calls.clear()
+    make_action("launch", path="app.exe", cycle_windows=False).execute(ctx(platform, host))
+    assert platform.calls == [("focus", "app.exe", False)]
 
 
 def test_launch_without_focus_option(platform: FakePlatform, host: FakeHost) -> None:
@@ -183,3 +186,22 @@ def test_custom_action_type_can_be_registered(platform: FakePlatform, host: Fake
         assert platform.calls == [("beep", 2), ("beep", 2)]
     finally:
         del ACTION_TYPES["test_beep"]
+
+
+def test_pick_window_cycles_through_program_windows() -> None:
+    from tap32.platform.base import pick_window
+
+    assert pick_window([], None, True) is None
+    # aktywny inny program → ostatnio używane okno
+    assert pick_window([30, 20, 10], 99, True) == 30
+    # aktywne okno programu → najdawniej używane; po aktywacji trafia na wierzch kolejności Z
+    z = [30, 20, 10]
+    visited = []
+    for _ in range(3):
+        chosen = pick_window(z, z[0], True)
+        visited.append(chosen)
+        z = [chosen, *[w for w in z if w != chosen]]
+    assert visited == [10, 20, 30]
+    # bez przełączania – zawsze ostatnio używane; jedno okno – to samo
+    assert pick_window([30, 20, 10], 30, False) == 30
+    assert pick_window([30], 30, True) == 30

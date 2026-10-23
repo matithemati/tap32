@@ -16,6 +16,20 @@ class PlatformError(RuntimeError):
     pass
 
 
+def pick_window(windows_z_order: list[int], foreground: int | None, cycle: bool) -> int | None:
+    """Wybiera okno do aktywacji.
+
+    windows_z_order – okna programu od najwyżej położonego (ostatnio używanego).
+    Gdy aktywne jest już okno tego programu i cycle=True, wybierane jest okno najdawniej
+    używane – kolejne wywołania obchodzą wszystkie okna po kolei.
+    """
+    if not windows_z_order:
+        return None
+    if cycle and foreground in windows_z_order and len(windows_z_order) > 1:
+        return windows_z_order[-1]
+    return windows_z_order[0]
+
+
 class PlatformBackend(ABC):
     name = "abstract"
 
@@ -24,8 +38,11 @@ class PlatformBackend(ABC):
     def launch(self, path: str, args: str = "", cwd: str = "") -> None: ...
 
     @abstractmethod
-    def focus_process(self, exe_name: str) -> bool:
-        """Przełącza na okno działającego procesu. Zwraca False, jeśli proces nie działa."""
+    def focus_process(self, exe_name: str, cycle: bool = False) -> bool:
+        """Przełącza na okno działającego procesu. Zwraca False, jeśli proces nie ma okna.
+
+        cycle=True: gdy okno programu jest już aktywne, przechodzi do kolejnego okna programu.
+        """
 
     @abstractmethod
     def open_path(self, path: str) -> None: ...
@@ -108,7 +125,7 @@ class NullPlatform(PlatformBackend):
     def launch(self, path: str, args: str = "", cwd: str = "") -> None:
         self._skip(f"launch {path}")
 
-    def focus_process(self, exe_name: str) -> bool:
+    def focus_process(self, exe_name: str, cycle: bool = False) -> bool:
         return False
 
     def open_path(self, path: str) -> None:
